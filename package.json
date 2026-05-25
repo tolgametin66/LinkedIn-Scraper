@@ -1,0 +1,30 @@
+{
+  "name": "linkedin-scraper-mcp",
+  "version": "1.0.0",
+  "description": "LinkedIn job scraper MCP tool for Claude Code — scrapes job postings, detects language, and exports to CSV or Excel",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "linkedin-scraper-mcp": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "exceljs": "^4.4.0",
+    "franc": "^6.2.0",
+    "linkedin-jobs-scraper": "^18.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

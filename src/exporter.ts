@@ -1,4 +1,5 @@
-import { Workbook, type Column } from "exceljs";
+import ExcelJS from "exceljs";
+type Column = ExcelJS.Column;
 import { writeFileSync } from "fs";
 import type { JobData, RunInfo } from "./types.js";
 
@@ -28,7 +29,7 @@ export async function exportToExcel(
     ? outputPath
     : `${outputPath}.xlsx`;
 
-  const workbook = new Workbook();
+  const workbook = new ExcelJS.Workbook();
   workbook.creator = "linkedin-scraper-mcp";
   workbook.created = new Date();
 

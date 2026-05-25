@@ -23,7 +23,8 @@ const JOB_COLUMNS: Partial<Column>[] = [
 export async function exportToExcel(
   jobs: JobData[],
   runInfo: RunInfo,
-  outputPath: string
+  outputPath: string,
+  log: (msg: string) => void = console.log
 ): Promise<string> {
   const filePath = outputPath.endsWith(".xlsx")
     ? outputPath
@@ -122,7 +123,7 @@ export async function exportToExcel(
   infoRows.forEach((r) => infoSheet.addRow(r));
 
   await workbook.xlsx.writeFile(filePath);
-  console.log(`\n💾 Excel file saved: ${filePath}`);
+  log(`\n💾 Excel file saved: ${filePath}`);
   return filePath;
 }
 
@@ -130,7 +131,8 @@ export async function exportToExcel(
 
 export async function exportToCSV(
   jobs: JobData[],
-  outputPath: string
+  outputPath: string,
+  log: (msg: string) => void = console.log
 ): Promise<string> {
   const filePath = outputPath.endsWith(".csv")
     ? outputPath
@@ -167,6 +169,6 @@ export async function exportToCSV(
   ];
 
   writeFileSync(filePath, lines.join("\n"), { encoding: "utf-8" });
-  console.log(`\n💾 CSV file saved: ${filePath}`);
+  log(`\n💾 CSV file saved: ${filePath}`);
   return filePath;
 }

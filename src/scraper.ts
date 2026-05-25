@@ -21,7 +21,7 @@ function randomDelay(minMs = 1000, maxMs = 3000): Promise<void> {
 
 function mapTimeFilter(
   value: ScraperParams["dateSincePosted"]
-): typeof timeFilter[keyof typeof timeFilter] | undefined {
+): (typeof timeFilter)[keyof typeof timeFilter] | undefined {
   switch (value) {
     case "past24hours":
       return timeFilter.DAY;
@@ -36,7 +36,7 @@ function mapTimeFilter(
 
 function mapExperienceFilter(
   value: ScraperParams["experienceLevel"]
-): typeof experienceLevelFilter[keyof typeof experienceLevelFilter] | undefined {
+): (typeof experienceLevelFilter)[keyof typeof experienceLevelFilter] | undefined {
   switch (value) {
     case "internship":
       return experienceLevelFilter.INTERNSHIP;
@@ -57,7 +57,7 @@ function mapExperienceFilter(
 
 function mapTypeFilter(
   value: ScraperParams["jobType"]
-): typeof typeFilter[keyof typeof typeFilter] | undefined {
+): (typeof typeFilter)[keyof typeof typeFilter] | undefined {
   switch (value) {
     case "fullTime":
       return typeFilter.FULL_TIME;
@@ -76,7 +76,7 @@ function mapTypeFilter(
 
 function mapRemoteFilter(
   value: ScraperParams["remoteFilter"]
-): typeof onSiteOrRemoteFilter[keyof typeof onSiteOrRemoteFilter] | undefined {
+): (typeof onSiteOrRemoteFilter)[keyof typeof onSiteOrRemoteFilter] | undefined {
   switch (value) {
     case "remote":
       return onSiteOrRemoteFilter.REMOTE;
@@ -102,10 +102,10 @@ function extractSalary(description: string): string {
   return "N/A";
 }
 
-export async function scrapeJobs(params: ScraperParams): Promise<{
-  jobs: JobData[];
-  totalScraped: number;
-}> {
+export async function scrapeJobs(
+  params: ScraperParams,
+  log: (msg: string) => void = console.log
+): Promise<{ jobs: JobData[]; totalScraped: number }> {
   const {
     query,
     location,
@@ -131,28 +131,21 @@ export async function scrapeJobs(params: ScraperParams): Promise<{
     ],
   } as never);
 
-  // Build filters object — only include defined filter values
   const filters: Record<string, unknown> = {};
-
   const mappedTime = mapTimeFilter(dateSincePosted);
   if (mappedTime !== undefined) filters["time"] = mappedTime;
-
   const mappedExp = mapExperienceFilter(experienceLevel);
   if (mappedExp !== undefined) filters["experience"] = [mappedExp];
-
   const mappedType = mapTypeFilter(jobType);
   if (mappedType !== undefined) filters["type"] = [mappedType];
-
   const mappedRemote = mapRemoteFilter(remoteFilter);
   if (mappedRemote !== undefined) filters["onSiteOrRemote"] = [mappedRemote];
-
-  // Always prefer recent results
   filters["relevance"] = relevanceFilter.RECENT;
 
   try {
     scraper.on(events.scraper.data, (data: RawJobData) => {
       rawJobs.push(data);
-      console.log(
+      log(
         `📥 Scraped [${rawJobs.length}/${limit}]: "${data.title}" at ${
           data.company ?? "Unknown Company"
         } · ${data.place}`
@@ -161,84 +154,73 @@ export async function scrapeJobs(params: ScraperParams): Promise<{
 
     scraper.on(events.scraper.error, (err: string | Error) => {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error(`❌ Scraper error: ${msg}`);
+      log(`❌ Scraper error: ${msg}`);
     });
 
     scraper.on(events.scraper.end, () => {
-      console.log(`\n📡 Scraper finished. Raw jobs collected: ${rawJobs.length}`);
+      log(`\n📡 Scraper finished. Raw jobs collected: ${rawJobs.length}`);
     });
 
     const activeFilters = Object.keys(filters).filter((k) => k !== "relevance");
-    console.log(
+    log(
       `\n🔍 Searching LinkedIn for "${query}"${
         location ? ` in "${location}"` : ""
       }...`
     );
     if (activeFilters.length > 0) {
-      console.log(`📋 Active filters: ${activeFilters.join(", ")}`);
+      log(`📋 Active filters: ${activeFilters.join(", ")}`);
     }
-    console.log(
+    log(
       `📏 Limit: ${limit} jobs | Allowed languages: ${allowedLanguages.join(", ")}\n`
     );
 
-    const queryOptions: Record<string, unknown> = {
-      limit,
-      filters,
-    };
+    const queryOptions: Record<string, unknown> = { limit, filters };
     if (location) queryOptions["locations"] = [location];
 
-    await scraper.run(
-      [{ query, options: queryOptions }],
-      // Global options (empty — all specified per-query above)
-      {}
-    );
+    await scraper.run([{ query, options: queryOptions }], {} as never);
 
     if (rawJobs.length === 0) {
-      console.warn(
+      log(
         "⚠️  No jobs were scraped. LinkedIn may have blocked the headless browser, " +
-          "or there are no results matching your filters.\n" +
-          "   Suggestions:\n" +
-          "   • Try removing some filters\n" +
-          "   • Set the LI_AT_COOKIE env variable for authenticated session\n" +
-          "   • Use a VPN or different IP\n" +
-          "   • Set headless: false in src/scraper.ts to debug visually"
+          "or there are no results matching your filters."
       );
+      log("   💡 Try: removing filters · using LI_AT_COOKIE · VPN · different query");
     }
   } finally {
     try {
       await scraper.close();
-      console.log("🔒 Browser closed.");
+      log("🔒 Browser closed.");
     } catch (closeErr) {
-      console.error("⚠️  Error closing browser:", closeErr);
+      log(
+        `⚠️  Error closing browser: ${
+          closeErr instanceof Error ? closeErr.message : String(closeErr)
+        }`
+      );
     }
   }
 
-  // Post-scrape: language detection and filtering with random delays
-  console.log(
-    `\n🌐 Running language detection on ${rawJobs.length} job(s)...\n`
-  );
+  log(`\n🌐 Running language detection on ${rawJobs.length} job(s)...\n`);
 
   const jobs: JobData[] = [];
 
   for (let i = 0; i < rawJobs.length; i++) {
     const data = rawJobs[i];
-
     if (i > 0) await randomDelay(1000, 3000);
 
     try {
       const description = data.description ?? "";
       const lang = await detectLanguage(description);
       const keep = shouldKeepJob(lang, allowedLanguages);
-
       const idx = `[${i + 1}/${rawJobs.length}]`;
+
       if (keep) {
-        console.log(
+        log(
           `✅ ${idx} KEPT     "${data.title}" @ ${
             data.company ?? "Unknown"
           } — lang: ${lang}`
         );
       } else {
-        console.log(
+        log(
           `🚫 ${idx} FILTERED "${data.title}" @ ${
             data.company ?? "Unknown"
           } — lang: ${lang}`
@@ -247,20 +229,17 @@ export async function scrapeJobs(params: ScraperParams): Promise<{
 
       if (keep) {
         if (dryRun) {
-          console.log(`   🔍 Dry-run: would export this job`);
+          log(`   🔍 Dry-run: would export this job`);
         } else {
           const descriptionPreview = description
             .replace(/\n+/g, " ")
             .replace(/\s+/g, " ")
             .trim()
             .substring(0, 300);
-
-          // Extract job type from insights if available
           const jobTypeLabel =
             data.insights?.find((s) =>
               /full.time|part.time|contract|temporary|internship/i.test(s)
             ) ?? "";
-
           jobs.push({
             title: data.title ?? "",
             company: data.company ?? "",
@@ -277,11 +256,11 @@ export async function scrapeJobs(params: ScraperParams): Promise<{
         }
       }
     } catch (err) {
-      console.error(
-        `⚠️  Error processing job [${i + 1}] "${data.title}":`,
-        err
+      log(
+        `⚠️  Error processing job [${i + 1}] "${data.title}": ${
+          err instanceof Error ? err.message : String(err)
+        }`
       );
-      // Keep the job on processing error, mark language as unknown
       if (!dryRun) {
         jobs.push({
           title: data.title ?? "",
@@ -302,7 +281,7 @@ export async function scrapeJobs(params: ScraperParams): Promise<{
     }
   }
 
-  console.log(
+  log(
     `\n📊 Results: ${rawJobs.length} scraped → ${jobs.length} passed language filter` +
       (dryRun ? " (dry-run, no file written)" : "")
   );
